@@ -1,0 +1,49 @@
+/* Specific styles for the login page */
+body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #8eeaa8 0%, #28a140 100%);
+    margin: 0;
+    padding: 0; /* IMPORTANT: Overrides styles.css padding to fix centering */
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.login-card {
+    width: 100%;
+    max-width: 400px;
+    background: white;
+    padding: 40px;
+    border-radius: 12px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    margin: 20px; /* Add margin for mobile view */
+}
+
+.login-header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.login-header h2 {
+    color: #333;
+    margin-bottom: 10px;
+    border: none;
+    padding: 0;
+}
+
+.login-header p {
+    color: #666;
+    margin: 0;
+}
+
+.error-msg {
+    color: #721c24;
+    background: #f8d7da;
+    padding: 12px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+    text-align: center;
+    border: 1px solid #f5c6cb;
+    display: none;
+}

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>System Setup - Payroll</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="login-styles.css">
+</head>
+<body class="login-mode">
+    <div class="login-card">
+        <div class="login-header">
+            <h2>⚙️ System Setup</h2>
+            <p>Create Owner Account</p>
+        </div>
+        <form id="registerForm" autocomplete="off">
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" id="regUser" required>
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="regPass" required minlength="8">
+            </div>
+            <button type="submit" class="btn btn-primary btn-large">Create Account</button>
+        </form>
+    </div>
+    <script>
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('regUser').value;
+            const password = document.getElementById('regPass').value;
+            
+            const res = await fetch('/api/register-owner', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username, password})
+            });
+            
+            if(res.ok) {
+                alert('Setup Complete. Please Login.');
+                window.location.href = '/login.html';
+            } else {
+                alert('Error or System already setup');
+            }
+        });
+
+        // Check if actually needs setup
+        fetch('/api/check-setup').then(r=>r.json()).then(d => {
+            if(d.isSetup) {
+                alert('System already setup.');
+                window.location.href = '/login.html';
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+db/
+generated/
+templates/
+.env

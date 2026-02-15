@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-translate="app_title">Payroll Management System</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="container">
+        <div class="top-bar">
+            <div class="user-menu">
+                <span id="userStatus">👤 Loading... ▼</span>
+                <div class="dropdown-content">
+                    <a href="#" onclick="showAddUserModal()" data-translate="add_user">➕ Add User</a>
+                    <a href="#" onclick="show2FAModal()" data-translate="setup_2fa">🔐 Setup 2FA</a>
+                    <a href="#" onclick="changePassword()" data-translate="change_password">🔑 Change Password</a>
+                    <a href="#" onclick="deleteMyAccount()" style="color:red;" data-translate="delete_account">❌ Delete
+                        Account</a>
+                    <a href="#" onclick="logout()" data-translate="logout">🚪 Logout</a>
+                </div>
+            </div>
+            <div class="language-switcher">
+                <button onclick="switchLanguage('en')" id="btn-en" class="lang-btn active">EN</button>
+                <button onclick="switchLanguage('ar')" id="btn-ar" class="lang-btn">AR</button>
+            </div>
+        </div>
+
+        <div class="header-container">
+            <img src="logo.png" alt="Malkiya Club Logo" class="app-logo">
+            <h1 data-translate="app_title">Payroll Management System</h1>
+        </div>
+
+        <div class="tabs">
+            <button class="tab-btn active" onclick="showTab('employees')" data-translate="tab_employees">👥
+                Employees</button>
+            <button class="tab-btn" onclick="showTab('generate')" data-translate="tab_generate">💰 Generate
+                Payslips</button>
+            <button class="tab-btn" onclick="showTab('history')" data-translate="tab_history">📊 Payment
+                History</button>
+            <button class="tab-btn" onclick="showTab('template')" data-translate="tab_template">📄 Template</button>
+        </div>
+
+        <div id="employees-tab" class="tab-content active">
+            <div class="card">
+                <div class="card-header">
+                    <h2 data-translate="employee_management">Employee Management</h2>
+                    <div class="header-actions">
+                        <button class="btn btn-secondary" onclick="window.location.href='/api/export/all'"
+                            data-translate="export_full_db">💾 Export Full DB</button>
+                        <button class="btn btn-primary" onclick="showAddEmployeeModal()" data-translate="add_employee">+
+                            Add Employee</button>
+                    </div>
+                </div>
+                <div class="filters-section">
+                    <div class="form-row">
+                        <div class="form-group"><label data-translate="filter_department">Department</label><select
+                                id="filterDepartment" onchange="applyFilters()">
+                                <option value="">All</option>
+                            </select></div>
+                        <div class="form-group"><label data-translate="filter_position">Position</label><select
+                                id="filterPosition" onchange="applyFilters()">
+                                <option value="">All</option>
+                            </select></div>
+                        <div class="form-group"><label data-translate="search_employee">Search</label><input type="text"
+                                id="searchEmployee" data-translate-placeholder="search_placeholder"
+                                placeholder="Search..." oninput="applyFilters()" autocomplete="off"></div>
+                        <div class="form-group"><label>&nbsp;</label><button class="btn btn-secondary"
+                                onclick="clearFilters()" data-translate="clear_filters">Clear</button></div>
+                    </div>
+                </div>
+                <div id="employeesList" class="employee-grid"></div>
+            </div>
+        </div>
+
+        <div id="generate-tab" class="tab-content">
+            <div class="card">
+                <h2 data-translate="generate_payslips">Generate Payslips</h2>
+                <div id="generateMessage"></div>
+                <div class="filters-section">
+                    <div class="form-row">
+                        <div class="form-group"><label data-translate="filter_department">Department</label><select
+                                id="genFilterDepartment" onchange="applyGenerateFilters()">
+                                <option value="">All</option>
+                            </select></div>
+                        <div class="form-group"><label data-translate="filter_position">Position</label><select
+                                id="genFilterPosition" onchange="applyGenerateFilters()">
+                                <option value="">All</option>
+                            </select></div>
+                        <div class="form-group"><label data-translate="search_employee">Search</label><input type="text"
+                                id="genSearchEmployee" data-translate-placeholder="search_placeholder"
+                                placeholder="Search..." oninput="applyGenerateFilters()" autocomplete="off"></div>
+                        <div class="form-group"><label>&nbsp;</label><button class="btn btn-secondary"
+                                onclick="clearGenerateFilters()" data-translate="clear_filters">Clear</button></div>
+                    </div>
+                </div>
+                <div class="selection-info" id="selectionInfo"><span><span id="selectedCount">0</span> <span
+                            data-translate="employees_selected">selected</span></span><button
+                        class="btn btn-secondary btn-sm" onclick="clearSelection()"
+                        data-translate="clear_selection">Clear</button></div>
+                <div class="employee-select-grid" id="employeeSelectList"></div>
+                <form id="payslipForm" class="payslip-form" autocomplete="off">
+                    <div class="form-row">
+                        <div class="form-group"><label data-translate="pay_period">Pay Period</label><input type="month"
+                                id="payPeriod" required></div>
+                        <div class="form-group"><label data-translate="bonus">Bonus (BHD)</label><input type="number"
+                                id="bonus" min="0" step="0.01" value="0" required></div>
+                        <div class="form-group"><label data-translate="deductions">Deductions (BHD)</label><input
+                                type="number" id="deductions" min="0" step="0.01" value="0" required></div>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-large"
+                        data-translate="generate_payslips_btn">Generate</button>
+                </form>
+                <div id="generatedResults" class="hidden">
+                    <h3 data-translate="generated_payslips">Generated Payslips</h3>
+                    <div id="resultsList"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="history-tab" class="tab-content">
+            <div class="card">
+                <div class="card-header">
+                    <h2 data-translate="payment_history">Payment History</h2>
+                    <div class="header-actions">
+                        <button id="historyBackBtn" class="btn btn-secondary hidden" onclick="backToHistoryList()"
+                            data-translate="back_to_list">⬅ Back to List</button>
+                        <button class="btn btn-primary" onclick="showAddPaymentModal()"
+                            data-translate="add_past_record">+ Add Past Record</button>
+                    </div>
+                </div>
+                <div id="historyMainView">
+                    <div class="filters-section">
+                        <div class="form-row">
+                            <div class="form-group"><label data-translate="filter_department">Department</label><select
+                                    id="historyFilterDepartment" onchange="searchHistoryCandidates()">
+                                    <option value="">All</option>
+                                </select></div>
+                            <div class="form-group"><label data-translate="filter_position">Position</label><select
+                                    id="historyFilterPosition" onchange="searchHistoryCandidates()">
+                                    <option value="">All</option>
+                                </select></div>
+                            <div class="form-group"><label data-translate="search_employee">Search</label><input
+                                    type="text" id="historySearchEmployee"
+                                    data-translate-placeholder="search_placeholder" placeholder="Search..."
+                                    oninput="searchHistoryCandidates()" autocomplete="off"></div>
+                            <div class="form-group"><label>&nbsp;</label><button class="btn btn-secondary"
+                                    onclick="clearHistoryFilters()" data-translate="clear_filters">Clear</button></div>
+                        </div>
+                    </div>
+                    <div id="historyCandidatesList" class="employee-grid"></div>
+                </div>
+                <div id="historyDetailView" class="hidden">
+                    <h3 id="historySelectedEmpName"
+                        style="margin-top:0; border-bottom:1px solid #eee; padding-bottom:10px;"></h3>
+                    <div id="historyStats"
+                        style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                        <div class="stat-card"
+                            style="background:#e3f2fd; padding:15px; border-radius:8px; text-align:center;"><small
+                                data-translate="stat_total_paid">Total Paid</small>
+                            <h3 id="statTotalPaid" style="color:#1565c0; margin:5px 0;">0.000</h3>
+                        </div>
+                        <div class="stat-card"
+                            style="background:#ffebee; padding:15px; border-radius:8px; text-align:center;"><small
+                                data-translate="stat_past_unpaid">Past Unpaid</small>
+                            <h3 id="statPastUnpaid" style="color:#c62828; margin:5px 0;">0.000</h3>
+                        </div>
+                        <div class="stat-card"
+                            style="background:#f3e5f5; padding:15px; border-radius:8px; text-align:center;"><small
+                                data-translate="stat_contract_total">Contract Total</small>
+                            <h3 id="statTotalContract" style="color:#6a1b9a; margin:5px 0;">0.000</h3>
+                        </div>
+                        <div class="stat-card"
+                            style="background:#fff3e0; padding:15px; border-radius:8px; text-align:center;"><small
+                                data-translate="stat_remaining">Remaining</small>
+                            <h3 id="statToBePaid" style="color:#ef6c00; margin:5px 0;">0.000</h3>
+                        </div>
+                    </div>
+                    <div id="historyBulkActions"
+                        style="display:none; background: #f8f9fa; padding: 10px; border-radius: 6px; margin-bottom: 15px; align-items: center; justify-content: space-between; border: 1px solid #ddd;">
+                        <div><strong data-translate="bulk_actions">Bulk Actions: </strong><span
+                                id="bulkSelectionCount">0</span></div>
+                        <div style="display:flex; gap:10px;">
+                            <button id="btnBulkPayGen" class="btn btn-sm btn-primary" onclick="processBulkPay(true)"
+                                data-translate="bulk_pay_gen">💰 Pay + Generate</button>
+                            <button id="btnBulkPay" class="btn btn-sm btn-success" onclick="processBulkPay(false)"
+                                data-translate="bulk_pay_only">💵 Pay Only</button>
+                            <button id="btnBulkDelete" class="btn btn-sm btn-danger" onclick="processBulkDelete()"
+                                data-translate="bulk_delete">🗑 Delete Selected</button>
+                        </div>
+                    </div>
+                    <input type="file" id="manualDocUpload" accept=".docx" style="display:none"
+                        onchange="handleDocUpload(this)">
+                    <div class="timeline-container">
+                        <div id="historyTimelineResults"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="template-tab" class="tab-content">
+            <div class="card">
+                <h2 data-translate="document_template">Document Template</h2>
+                <div class="template-info" id="templateInfo"></div>
+                <div class="upload-section">
+                    <h3 data-translate="upload_template">Upload New Template</h3>
+                    <input type="file" id="templateFile" accept=".docx" style="display: none;">
+                    <button class="btn btn-primary" onclick="document.getElementById('templateFile').click()"
+                        data-translate="choose_template">📤 Choose File</button>
+                    <button class="btn btn-secondary" onclick="uploadTemplate()" id="uploadBtn" disabled
+                        data-translate="upload_btn">Upload</button>
+                    <p id="selectedFileName" class="file-name"></p>
+                </div>
+                <div class="template-guide">
+                    <h3 data-translate="template_guide_title">How to Create Your Template</h3>
+                    <p data-translate="template_guide_intro" style="color:#555; margin-bottom:10px;">Use these
+                        placeholders...</p>
+                    <div class="guide-content">
+                        <p><strong data-translate="available_placeholders">Available placeholders:</strong></p>
+                        <ul>
+                            <li><code>{{EMPLOYEE_NAME}}</code> - <span data-translate="ph_name">Name</span></li>
+                            <li><code>{{EMPLOYEE_ID}}</code> - <span data-translate="ph_id">ID</span></li>
+                            <li><code>{{POSITION}}</code> - <span data-translate="ph_position">Position</span></li>
+                            <li><code>{{DEPARTMENT}}</code> - <span data-translate="ph_department">Department</span>
+                            </li>
+                            <li><code>{{EMAIL}}</code> - <span data-translate="ph_email">Email</span></li>
+                            <li><code>{{PHONE}}</code> - <span data-translate="ph_phone">Phone</span></li>
+                            <li><code>{{ADDRESS}}</code> - <span data-translate="ph_address">Address</span></li>
+                            <li><code>{{NATIONAL_ID}}</code> - <span data-translate="ph_national_id">National ID</span>
+                            </li>
+                            <li><code>{{BASE_SALARY}}</code> - <span data-translate="ph_base_salary">Base Salary</span>
+                            </li>
+                            <li><code>{{BONUS}}</code> - <span data-translate="ph_bonus">Bonus</span></li>
+                            <li><code>{{DEDUCTIONS}}</code> - <span data-translate="ph_deductions">Deductions</span>
+                            </li>
+                            <li><code>{{NET_SALARY}}</code> - <span data-translate="ph_net_salary">Net Salary</span>
+                            </li>
+                            <li><code>{{PAY_PERIOD}}</code> - <span data-translate="ph_pay_period">Pay Period</span>
+                            </li>
+                            <li><code>{{CONTRACT_START}}</code> - <span data-translate="ph_contract_start">Start
+                                    Date</span></li>
+                            <li><code>{{CONTRACT_END}}</code> - <span data-translate="ph_contract_end">End Date</span>
+                            </li>
+                            <li><code>{{GENERATED_DATE}}</code> - <span data-translate="ph_generated_date">Generated
+                                    Date</span></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer class="app-footer">
+            Malkiyaclub © 2026
+        </footer>
+    </div>
+
+    <div id="renewContractModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeRenewModal()">&times;</span>
+            <h2 data-translate="renew_title">Renew Contract / Promotion</h2>
+            <p style="color:#666; margin-bottom:15px; font-size: 0.9em;" data-translate="renew_desc">This will close the
+                current contract and start a new one.</p>
+            <form id="renewContractForm" onsubmit="submitRenewContract(event)">
+                <input type="hidden" id="renewEmpId">
+                <div class="form-row">
+                    <div class="form-group"><label data-translate="new_position">New Position</label><input type="text"
+                            id="renewPosition" required></div>
+                    <div class="form-group"><label data-translate="new_department">New Department</label><input
+                            type="text" id="renewDepartment" required></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label data-translate="new_salary">New Base Salary</label><input
+                            type="number" id="renewSalary" min="0" step="0.001" required></div>
+                    <div class="form-group"><label data-translate="effective_date">Effective Start Date</label><input
+                            type="date" id="renewDate" required></div>
+                </div>
+                <div class="modal-actions"><button type="submit" class="btn btn-primary"
+                        data-translate="start_contract_btn">Start New Contract</button><button type="button"
+                        class="btn btn-secondary" onclick="closeRenewModal()" data-translate="cancel">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="employeeModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeEmployeeModal()">&times;</span>
+            <h2 id="modalTitle" data-translate="add_employee">Add Employee</h2>
+            <form id="employeeForm" autocomplete="off"><input type="hidden" id="employeeId">
+                <div class="form-row">
+                    <div class="form-group"><label data-translate="full_name">Full Name *</label><input type="text"
+                            id="empName" required></div>
+                    <div class="form-group"><label data-translate="email">Email</label><input type="email"
+                            id="empEmail"></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label data-translate="position">Position *</label><input type="text"
+                            id="empPosition" required></div>
+                    <div class="form-group"><label data-translate="department">Department *</label><input type="text"
+                            id="empDepartment" required></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label data-translate="base_salary">Base Salary (BHD) *</label><input
+                            type="number" id="empSalary" min="0" step="0.01" required></div>
+                    <div class="form-group"><label data-translate="phone_number">Phone Number</label><input type="tel"
+                            id="empPhone"></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label data-translate="contract_start">Contract Start *</label><input
+                            type="date" id="empContractStart" required></div>
+                    <div class="form-group"><label data-translate="contract_end">Contract End</label><input type="date"
+                            id="empContractEnd"></div>
+                </div>
+                <div class="form-group"><label data-translate="excluded_months">Excluded Months</label>
+                    <div id="excludedMonthsContainer"
+                        style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; background: #f9f9f9; padding: 10px; border-radius: 4px;">
+                    </div>
+                </div>
+                <div class="form-group"><label data-translate="address">Address</label><textarea id="empAddress"
+                        rows="2"></textarea></div>
+                <div class="form-group"><label data-translate="national_id">National ID</label><input type="text"
+                        id="empNationalId"></div>
+                <div class="modal-actions"><button type="submit" class="btn btn-primary"
+                        data-translate="save_employee">Save</button><button type="button" class="btn btn-secondary"
+                        onclick="closeEmployeeModal()" data-translate="cancel">Cancel</button></div>
+            </form>
+        </div>
+    </div>
+
+    <div id="setup2FAModal" class="modal">
+        <div class="modal-content" style="text-align: center;"><span class="close"
+                onclick="document.getElementById('setup2FAModal').style.display='none'">&times;</span>
+            <h2 data-translate="setup_2fa">Setup 2-Step Verification</h2>
+            <div id="qrContainer" style="margin: 20px 0;">
+                <p>Loading QR Code...</p>
+            </div>
+            <p style="margin-bottom: 10px; color:#555;" data-translate="setup_2fa_step1">1. Scan this QR code with
+                Google Authenticator or Authy</p>
+            <p style="margin-bottom: 20px; color:#555;" data-translate="setup_2fa_step2">2. Enter the 6-digit code below
+                to confirm</p>
+            <div class="form-group" style="display: flex; justify-content: center;"><input type="text"
+                    id="verify2FACode" placeholder="123456" maxlength="6" autocomplete="off"
+                    style="width: 150px; text-align: center; font-size: 1.5em; letter-spacing: 5px;"></div><button
+                class="btn btn-primary" onclick="confirm2FASetup()">Enable 2FA</button><input type="hidden"
+                id="secret2FA">
+        </div>
+    </div>
+    <div id="addUserModal" class="modal">
+        <div class="modal-content"><span class="close" onclick="closeAddUserModal()">&times;</span>
+            <h2 data-translate="add_user">Create New User</h2>
+            <form id="addUserForm" autocomplete="off">
+                <div class="form-group"><label>Username</label><input type="text" id="newUsername" required></div>
+                <div class="form-group"><label>Password</label><input type="password" id="newPassword" minlength="6"
+                        required></div>
+                <div class="modal-actions"><button type="submit" class="btn btn-primary">Create</button><button
+                        type="button" class="btn btn-secondary" onclick="closeAddUserModal()">Cancel</button></div>
+            </form>
+        </div>
+    </div>
+    <div id="paymentModal" class="modal">
+        <div class="modal-content"><span class="close" onclick="closePaymentModal()">&times;</span>
+            <h2 data-translate="add_past_payment">Add Payment</h2>
+            <form id="paymentRecordForm" autocomplete="off">
+                <div class="form-group"><label data-translate="select_employee">Employee</label><select
+                        id="paymentEmployee" onchange="updatePaymentModalSalary()" required></select></div>
+                <div class="form-row">
+                    <div class="form-group"><label data-translate="pay_period">Period</label><input type="month"
+                            id="paymentPeriod" required></div>
+                    <div class="form-group"><label data-translate="base_salary">Base</label><input type="number"
+                            id="paymentBaseSalary" required></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label data-translate="bonus">Bonus</label><input type="number"
+                            id="paymentBonus" value="0"></div>
+                    <div class="form-group"><label data-translate="deductions">Deductions</label><input type="number"
+                            id="paymentDeductions" value="0"></div>
+                </div>
+                <div class="form-group"><label data-translate="net_salary">Net</label><input type="number"
+                        id="paymentNetSalary" readonly></div>
+                <div class="modal-actions"><button type="submit" class="btn btn-primary"
+                        data-translate="add_record">Add</button><button type="button" class="btn btn-secondary"
+                        onclick="closePaymentModal()" data-translate="cancel">Cancel</button></div>
+            </form>
+        </div>
+    </div>
+    <div id="exportModal" class="modal">
+        <div class="modal-content"><span class="close" onclick="closeExportModal()">&times;</span>
+            <h2 data-translate="export_department_data">Export Department Data</h2>
+            <form id="exportForm" autocomplete="off">
+                <div class="form-group"><label data-translate="select_department">Select Department *</label><select
+                        id="exportDepartment" required>
+                        <option value="" data-translate="select_department_option">-- Select a department --</option>
+                    </select></div>
+                <div class="modal-actions"><button type="submit" class="btn btn-primary"
+                        data-translate="export_excel">📊 Export to Excel</button><button type="button"
+                        class="btn btn-secondary" onclick="closeExportModal()" data-translate="cancel">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="translations.js"></script>
+    <script src="utils.js"></script>
+    <script src="auth.js"></script>
+    <script src="employees.js"></script>
+    <script src="payslips.js"></script>
+    <script src="history.js"></script>
+    <script src="payments.js"></script>
+    <script src="export.js"></script>
+    <script src="template.js"></script>
+    <script src="init.js"></script>
+</body>
+
+</html>
