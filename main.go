@@ -1749,16 +1749,31 @@ func main() {
 	log.Println("🔒 SECURE HR PAYROLL SYSTEM STARTING")
 	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
+	// Check if TLS certificates exist when PRODUCTION=true
 	if os.Getenv("PRODUCTION") == "true" {
-		log.Println("🟢 PRODUCTION MODE: HTTPS Enabled")
-		log.Println("📡 Server: https://localhost:8443")
-		log.Println("⚠️  Ensure valid TLS certificates are in ./certs/")
-		log.Fatal(http.ListenAndServeTLS(":8443", "./certs/server.crt", "./certs/server.key", nil))
+		certFile := "./certs/server.crt"
+		keyFile := "./certs/server.key"
+
+		// Only use HTTPS if certificates are present
+		if _, certErr := os.Stat(certFile); certErr == nil {
+			if _, keyErr := os.Stat(keyFile); keyErr == nil {
+				log.Println("🟢 PRODUCTION MODE: HTTPS Enabled")
+				log.Println("📡 Server: https://localhost:8443")
+				log.Println("✓  TLS certificates found")
+				log.Fatal(http.ListenAndServeTLS(":8443", certFile, keyFile, nil))
+			}
+		}
+
+		// Fall back to HTTP in production (for reverse proxy scenarios like Cloudflare)
+		log.Println("🟢 PRODUCTION MODE: HTTP (Behind Reverse Proxy)")
+		log.Println("📡 Server: http://localhost:8080")
+		log.Println("⚠️  Running without TLS - ensure reverse proxy (Cloudflare/nginx) handles HTTPS")
+		log.Fatal(http.ListenAndServe(":8080", nil))
 	} else {
 		log.Println("🟡 DEVELOPMENT MODE: HTTP (INSECURE)")
 		log.Println("📡 Server: http://localhost:8080")
 		log.Println("⚠️  WARNING: Deploy behind HTTPS reverse proxy for production!")
-		log.Println("⚠️  Recommended: Use Caddy or nginx with Let's Encrypt")
+		log.Println("⚠️  Recommended: Use Caddy, nginx, or Cloudflare")
 		log.Fatal(http.ListenAndServe(":8080", nil))
 	}
 }
