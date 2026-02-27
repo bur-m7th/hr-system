@@ -12,14 +12,21 @@ async function displayEmployees() {
 
         const safePos = employee.position ? employee.position.replace(/'/g, "\\'") : "";
         const safeDept = employee.department ? employee.department.replace(/'/g, "\\'") : "";
+        const safeNameForJs = employee.name ? employee.name.replace(/'/g, "\\'") : "";
 
-        // Calculate months remaining
         const contractInfo = calculateContractRemaining(employee.contractStart, employee.contractEnd);
         const contractBadge = getContractBadge(contractInfo);
 
+        const photoHtml = employee.photoUrl
+            ? `<img src="${employee.photoUrl}" style="width:60px;height:60px;object-fit:cover;border-radius:50%;float:right;margin-left:10px;border:2px solid #28a140;">`
+            : `<div style="width:60px;height:60px;border-radius:50%;background:#e0e0e0;display:inline-flex;align-items:center;justify-content:center;font-size:1.5em;float:right;margin-left:10px;">👤</div>`;
+
         card.innerHTML = `
-            <div class="employee-name">${employee.name}</div>
-            ${contractBadge}
+            <div style="overflow:hidden;">
+                ${photoHtml}
+                <div class="employee-name">${employee.name}</div>
+                ${contractBadge}
+            </div>
             <div class="employee-info">📧 ${employee.email || "---"}</div>
             <div class="employee-info">💼 ${employee.position}</div>
             <div class="employee-info">🏢 ${employee.department}</div>
@@ -28,6 +35,7 @@ async function displayEmployees() {
             <div class="employee-actions">
                 <button class="btn btn-secondary btn-sm" onclick="editEmployee(${employee.id})">${translations[currentLanguage].edit}</button>
                 <button class="btn btn-primary btn-sm" onclick="showRenewModal(${employee.id}, ${employee.baseSalary}, '${safePos}', '${safeDept}')">${translations[currentLanguage].renew_btn}</button>
+                <button class="btn btn-secondary btn-sm" onclick="showEmployeeFilesModal(${employee.id}, '${safeNameForJs}')">📁 Files</button>
                 <button class="btn btn-danger btn-sm" onclick="deleteEmployee(${employee.id})">${translations[currentLanguage].delete}</button>
             </div>
         `;
@@ -363,9 +371,23 @@ async function loadEmployees() {
     try {
         const response = await fetch(`${API_BASE}/employees`);
         employees = await response.json();
+        await loadEmployeePhotos();
         displayEmployees();
     } catch (error) {
         console.error(error);
         showMessage('Error loading employees', 'error');
+    }
+}
+
+async function loadEmployeePhotos() {
+    for (const emp of employees) {
+        try {
+            const res = await fetch(`${API_BASE}/employee/files?employeeId=${emp.id}`);
+            const files = await res.json();
+            const photo = files.find(f => f.fileType === 'photo');
+            emp.photoUrl = photo ? `/employee_files/${photo.fileName}` : null;
+        } catch (e) {
+            emp.photoUrl = null;
+        }
     }
 }

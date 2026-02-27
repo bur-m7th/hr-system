@@ -252,6 +252,22 @@
             </div>
         </div>
 
+        <div id="employeeFilesModal" class="modal">
+            <div class="modal-content" style="max-width:600px;">
+                <span class="close" onclick="closeFilesModal()">&times;</span>
+                <h2>📁 <span id="filesModalTitle"></span></h2>
+
+                <h3>Profile Photo</h3>
+                <div id="empPhotoContainer" style="text-align:center; margin-bottom:20px;"></div>
+
+                <h3>Documents</h3>
+                <div id="empDocsContainer" style="margin-bottom:20px;"></div>
+
+                <button class="btn btn-primary" onclick="triggerFileUpload('document')">📎 Upload Document</button>
+                <input type="file" id="empFileInput" style="display:none" onchange="handleEmpFileUpload(this)">
+            </div>
+        </div>
+
         <footer class="app-footer">
             Malkiyaclub © 2026
         </footer>
@@ -412,6 +428,7 @@
     <script src="payments.js"></script>
     <script src="export.js"></script>
     <script src="template.js"></script>
+    <script src="employee-files.js"></script>
     <script src="init.js"></script>
 </body>
 

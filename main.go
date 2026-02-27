@@ -372,6 +372,16 @@ func initDB() error {
             totp_secret TEXT,
             totp_enabled BOOLEAN DEFAULT 0
         )`,
+		`CREATE TABLE IF NOT EXISTS employee_files (
+    		id INTEGER PRIMARY KEY AUTOINCREMENT,
+    		employee_id INTEGER NOT NULL,
+    		file_type TEXT NOT NULL,  -- 'photo' or 'document'
+    		file_name TEXT NOT NULL,
+    		original_name TEXT NOT NULL,
+    		description TEXT DEFAULT '',
+	    	uploaded_at TEXT NOT NULL,
+    		FOREIGN KEY (employee_id) REFERENCES employees(id)
+		)`,
 	}
 
 	for _, q := range queries {
@@ -973,6 +983,23 @@ func deleteEmployee(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid employee ID", http.StatusBadRequest)
 		return
 	}
+	// Clean up generated payslips
+	rows, _ := db.Query("SELECT document_path FROM payments WHERE employee_id=? AND document_path != ''", id)
+	for rows.Next() {
+		var path string
+		rows.Scan(&path)
+		os.Remove(filepath.Join("./generated", path))
+	}
+	rows.Close()
+	// Clean up employee files (photos & documents)
+	fileRows, _ := db.Query("SELECT file_name FROM employee_files WHERE employee_id=?", id)
+	for fileRows.Next() {
+		var fn string
+		fileRows.Scan(&fn)
+		os.Remove(filepath.Join("./employee_files", fn))
+	}
+	fileRows.Close()
+	db.Exec("DELETE FROM employee_files WHERE employee_id=?", id)
 	db.Exec("DELETE FROM payments WHERE employee_id=?", id)
 	db.Exec("DELETE FROM contracts WHERE employee_id=?", id)
 	db.Exec("DELETE FROM employees WHERE id=?", id)
@@ -1132,11 +1159,13 @@ func addPaymentRecord(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid pay period", http.StatusBadRequest)
 		return
 	}
-	err := db.QueryRow("SELECT name FROM employees WHERE id=?", p.EmployeeID).Scan(&p.EmployeeName)
+	var encName string
+	err := db.QueryRow("SELECT name FROM employees WHERE id=?", p.EmployeeID).Scan(&encName)
 	if err != nil {
 		http.Error(w, "Employee not found", http.StatusNotFound)
 		return
 	}
+	p.EmployeeName, _ = decrypt(encName)
 	p.GeneratedAt = time.Now().Format("2006-01-02 15:04:05")
 	if p.NetSalary == 0 {
 		p.NetSalary = p.BaseSalary + p.Bonus - p.Deductions
@@ -1494,7 +1523,8 @@ func uploadTemplate(w http.ResponseWriter, r *http.Request) {
 	}
 	defer dst.Close()
 	io.Copy(dst, file)
-	if _, err := os.Stat("templates/active_template.docx"); os.IsNotExist(err) {
+	if _, err := os.ReadFile("./templates/.active"); err != nil {
+		os.WriteFile("./templates/.active", []byte(handler.Filename), 0644)
 		copyFile(filepath.Join("templates", handler.Filename), "templates/active_template.docx")
 	}
 	userID := getUserID(r)
@@ -1521,6 +1551,7 @@ func setActiveTemplate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Template not found", http.StatusNotFound)
 		return
 	}
+	os.WriteFile("./templates/.active", []byte(req.Filename), 0644)
 	copyFile(sourcePath, "templates/active_template.docx")
 	userID := getUserID(r)
 	auditLog(userID, "TEMPLATE_ACTIVATED", fmt.Sprintf("File: %s", req.Filename))
@@ -1550,8 +1581,19 @@ func deleteTemplate(w http.ResponseWriter, r *http.Request) {
 }
 
 func getActiveTemplateName() string {
-	if _, err := os.Stat("templates/active_template.docx"); err == nil {
-		return "active_template.docx"
+	data, err := os.ReadFile("./templates/.active")
+	if err == nil {
+		name := strings.TrimSpace(string(data))
+		if name != "" {
+			return name
+		}
+	}
+	// Fallback: first .docx found
+	files, _ := os.ReadDir("./templates")
+	for _, f := range files {
+		if !f.IsDir() && strings.HasSuffix(f.Name(), ".docx") && f.Name() != "active_template.docx" {
+			return f.Name()
+		}
 	}
 	return "template.docx"
 }
@@ -1669,6 +1711,149 @@ func exportDepartment(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(csv))
 }
 
+func uploadEmployeeFile(w http.ResponseWriter, r *http.Request) {
+	enableCORS(w)
+	if r.Method != "POST" {
+		return
+	}
+	r.ParseMultipartForm(20 << 20)
+
+	empIDStr := r.FormValue("employeeId")
+	fileType := r.FormValue("fileType")
+	description := sanitizeInput(r.FormValue("description"))
+
+	empID, err := strconv.Atoi(empIDStr)
+	if err != nil || empID < 1 {
+		http.Error(w, "Invalid employee ID", http.StatusBadRequest)
+		return
+	}
+	if fileType != "photo" && fileType != "document" {
+		http.Error(w, "Invalid file type", http.StatusBadRequest)
+		return
+	}
+
+	file, handler, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, "File error", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	if handler.Size > 20<<20 {
+		http.Error(w, "File too large (max 20MB)", http.StatusBadRequest)
+		return
+	}
+
+	ext := strings.ToLower(filepath.Ext(handler.Filename))
+	allowedPhoto := map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".webp": true}
+	allowedDoc := map[string]bool{".pdf": true, ".jpg": true, ".jpeg": true, ".png": true, ".docx": true}
+
+	if fileType == "photo" && !allowedPhoto[ext] {
+		http.Error(w, "Only jpg/png/webp allowed for photos", http.StatusBadRequest)
+		return
+	}
+	if fileType == "document" && !allowedDoc[ext] {
+		http.Error(w, "Only pdf/jpg/png/docx allowed for documents", http.StatusBadRequest)
+		return
+	}
+
+	// If replacing photo, delete old one first
+	if fileType == "photo" {
+		var oldFile string
+		db.QueryRow("SELECT file_name FROM employee_files WHERE employee_id=? AND file_type='photo'", empID).Scan(&oldFile)
+		if oldFile != "" {
+			os.Remove(filepath.Join("./employee_files", oldFile))
+			db.Exec("DELETE FROM employee_files WHERE employee_id=? AND file_type='photo'", empID)
+		}
+	}
+
+	os.MkdirAll("./employee_files", 0755)
+	newFilename := fmt.Sprintf("emp_%d_%s_%d%s", empID, fileType, time.Now().UnixNano(), ext)
+	dst, err := os.Create(filepath.Join("./employee_files", newFilename))
+	if err != nil {
+		http.Error(w, "Failed to save file", http.StatusInternalServerError)
+		return
+	}
+	defer dst.Close()
+	io.Copy(dst, file)
+
+	uploadedAt := time.Now().Format("2006-01-02 15:04:05")
+	res, err := db.Exec(
+		"INSERT INTO employee_files (employee_id, file_type, file_name, original_name, description, uploaded_at) VALUES (?, ?, ?, ?, ?, ?)",
+		empID, fileType, newFilename, handler.Filename, description, uploadedAt,
+	)
+	if err != nil {
+		http.Error(w, "DB error", http.StatusInternalServerError)
+		return
+	}
+	id, _ := res.LastInsertId()
+	userID := getUserID(r)
+	auditLog(userID, "EMPLOYEE_FILE_UPLOADED", fmt.Sprintf("EmpID: %d, Type: %s, File: %s", empID, fileType, newFilename))
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"id": id, "fileName": newFilename, "originalName": handler.Filename, "fileType": fileType,
+	})
+}
+
+func getEmployeeFiles(w http.ResponseWriter, r *http.Request) {
+	enableCORS(w)
+	empIDStr := r.URL.Query().Get("employeeId")
+	empID, err := strconv.Atoi(empIDStr)
+	if err != nil || empID < 1 {
+		http.Error(w, "Invalid ID", http.StatusBadRequest)
+		return
+	}
+	rows, err := db.Query(
+		"SELECT id, file_type, file_name, original_name, description, uploaded_at FROM employee_files WHERE employee_id=? ORDER BY uploaded_at DESC",
+		empID,
+	)
+	if err != nil {
+		http.Error(w, "DB error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	type FileRecord struct {
+		ID           int    `json:"id"`
+		FileType     string `json:"fileType"`
+		FileName     string `json:"fileName"`
+		OriginalName string `json:"originalName"`
+		Description  string `json:"description"`
+		UploadedAt   string `json:"uploadedAt"`
+	}
+	var files []FileRecord
+	for rows.Next() {
+		var f FileRecord
+		rows.Scan(&f.ID, &f.FileType, &f.FileName, &f.OriginalName, &f.Description, &f.UploadedAt)
+		files = append(files, f)
+	}
+	if files == nil {
+		files = []FileRecord{}
+	}
+	json.NewEncoder(w).Encode(files)
+}
+
+func deleteEmployeeFile(w http.ResponseWriter, r *http.Request) {
+	enableCORS(w)
+	if r.Method != "DELETE" {
+		return
+	}
+	idStr := r.URL.Query().Get("id")
+	fileID, err := strconv.Atoi(idStr)
+	if err != nil || fileID < 1 {
+		http.Error(w, "Invalid ID", http.StatusBadRequest)
+		return
+	}
+	var fileName string
+	db.QueryRow("SELECT file_name FROM employee_files WHERE id=?", fileID).Scan(&fileName)
+	if fileName != "" {
+		os.Remove(filepath.Join("./employee_files", fileName))
+	}
+	db.Exec("DELETE FROM employee_files WHERE id=?", fileID)
+	userID := getUserID(r)
+	auditLog(userID, "EMPLOYEE_FILE_DELETED", fmt.Sprintf("FileID: %d", fileID))
+	w.WriteHeader(http.StatusOK)
+}
+
 // ================= MAIN FUNCTION =================
 
 func main() {
@@ -1694,6 +1879,13 @@ func main() {
 	http.HandleFunc("/api/user/delete-account", authMiddleware(deleteAccount))
 	http.HandleFunc("/api/users/add", authMiddleware(createUser))
 	http.HandleFunc("/api/employees", authMiddleware(getEmployees))
+	http.HandleFunc("/api/employee/files", authMiddleware(getEmployeeFiles))
+	http.HandleFunc("/api/employee/files/upload", authMiddleware(uploadEmployeeFile))
+	http.HandleFunc("/api/employee/files/delete", authMiddleware(deleteEmployeeFile))
+
+	http.Handle("/employee_files/", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		http.StripPrefix("/employee_files/", http.FileServer(http.Dir("./employee_files"))).ServeHTTP(w, r)
+	}))
 	http.HandleFunc("/api/employees/add", authMiddleware(addEmployee))
 	http.HandleFunc("/api/employees/update", authMiddleware(updateEmployee))
 	http.HandleFunc("/api/employees/delete", authMiddleware(deleteEmployee))
