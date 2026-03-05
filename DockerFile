@@ -1,0 +1,52 @@
+# ─── Stage 1: Build Go binary ───────────────────────────────────────────────
+FROM golang:1.24-alpine AS builder
+
+WORKDIR /build
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+RUN CGO_ENABLED=1 APKBUILD="" \
+    apk add --no-cache gcc musl-dev && \
+    go build -o hr-payroll-system .
+
+# ─── Stage 2: Runtime ────────────────────────────────────────────────────────
+FROM alpine:3.19
+
+# Install Python3, pip, and runtime deps
+RUN apk add --no-cache \
+    python3 \
+    py3-pip \
+    gcc \
+    musl-dev \
+    python3-dev \
+    sqlite \
+    ca-certificates \
+    tzdata
+
+# Install Python dependencies for scripts/generate_doc.py and export
+RUN pip3 install --no-cache-dir --break-system-packages \
+    python-docx \
+    openpyxl
+
+WORKDIR /app
+
+# Copy binary
+COPY --from=builder /build/hr-payroll-system .
+
+# Copy static assets and scripts
+COPY static/ ./static/
+COPY templates/ ./templates/
+COPY scripts/ ./scripts/
+
+# Runtime directories (will be mounted as volumes)
+RUN mkdir -p /app/db /app/employee_files /app/generated
+
+# Default port (overridable via PORT env var)
+ENV PORT=8080
+ENV TZ=Asia/Bahrain
+
+EXPOSE ${PORT}
+
+CMD ["sh", "-c", "./hr-payroll-system --port=${PORT}"]

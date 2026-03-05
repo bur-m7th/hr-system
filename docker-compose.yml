@@ -1,0 +1,54 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  HR Payroll System — Docker Compose
+#
+#  Portainer setup:
+#    1. Stacks → Add Stack → Upload this file
+#    2. Set APP_PORT in the "Environment variables" section (default: 8080)
+#    3. Deploy — Portainer will clone the repo and build the image on this host
+#
+#  To update to latest code:
+#    Portainer → Stacks → hr-system → Editor → Re-deploy
+#    (or on host: docker compose build --no-cache && docker compose up -d)
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  hr-system:
+    build:
+      context: https://github.com/bur-m7th/hr-system.git   # clones repo on build
+      dockerfile: Dockerfile
+    image: hr-payroll-system:local        # tags the built image locally
+    container_name: hr-payroll
+    restart: unless-stopped
+
+    environment:
+      - PORT=${APP_PORT:-8080}            # set APP_PORT in Portainer env vars to change port
+      - TZ=Asia/Bahrain
+
+    ports:
+      - "${APP_PORT:-8080}:${APP_PORT:-8080}"   # host:container — both follow APP_PORT
+
+    volumes:
+      - hr_db:/app/db                           # SQLite database + encryption key + audit log
+      - hr_files:/app/employee_files            # employee uploaded files
+      - hr_generated:/app/generated             # generated payslips
+      - hr_templates:/app/templates             # payslip templates
+
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:${APP_PORT:-8080}/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+# ─── Named volumes (persist across container restarts and updates) ────────────
+volumes:
+  hr_db:
+    driver: local
+  hr_files:
+    driver: local
+  hr_generated:
+    driver: local
+  hr_templates:
+    driver: local
